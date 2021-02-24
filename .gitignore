@@ -1,0 +1,11 @@
+# binary
+miniserv
+*.o
+*.out
+
+# test files
+*test*
+
+# hidden files
+.*
+!.gitignore
