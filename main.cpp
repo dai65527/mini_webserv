@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 15:18:18 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/25 13:08:49 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/25 19:55:46 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -69,7 +69,7 @@ void server() {
       continue;
     }
 
-    // check each session and recv/send if ready
+    // check each session if it is ready to recv/send
     for (std::list<Session>::iterator itr = sessions.begin();
          itr != sessions.end() && n_fd > 0;) {
       if (FD_ISSET(itr->getFd(), &rfd)) {
