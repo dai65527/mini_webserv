@@ -6,39 +6,45 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 16:26:56 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/24 18:40:07 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/25 08:58:25 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #ifndef SESSION_HPP
 #define SESSION_HPP
 
-#define SESSION_NOT_READY       0x0000
+#include <string>
+
+#include "config.hpp"
+
+#define SESSION_NOT_INIT 0x0000
 #define SESSION_FOR_CLIENT_RECV 0x0001
 #define SESSION_FOR_CLIENT_SEND 0x0002
-#define SESSION_FOR_CGI_RECV    0x0011 // to be implemented
-#define SESSION_FOR_CGI_SEND    0x0012 // to be implemented
+#define SESSION_FOR_CGI_RECV 0x0011  // to be implemented
+#define SESSION_FOR_CGI_SEND 0x0012  // to be implemented
+#define SESSION_PROCESSING 0x0100
 
-class Session
-{
-private:
-  int sock_fd_;
+class Session {
+ private:
+  int fd_;
   int status_;
+  std::string buf_;
+  int retry_count_;
 
-  // do not allow copy and assignation
+ public:
   Session();
-  Session(const Session& ref);
+  Session(int sock_fd);
   Session& operator=(const Session& ref);
-
-public:
-  Session(int socket_fd);
+  Session(const Session& ref);
   ~Session();
 
-  int status() const;
-  int getSockFd() const;
+  // getters
+  int getStatus() const;
+  int getFd() const;
 
-  void recvReq();
-  void sendRes();
+  int recvReq();
+  int sendRes();
+  int createResponse();
 };
 
 #endif /* SESSION_HPP */

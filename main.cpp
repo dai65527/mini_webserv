@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   mini_serv.cpp                                      :+:      :+:    :+:   */
+/*   main.cpp                                           :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 15:18:18 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/24 18:27:27 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/25 12:28:31 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,9 +22,8 @@
 #include "config.hpp"
 
 void server() {
-  int n_fd;           // number of fds ...
-                      // waiting to get ready (before select)
-                      // or ready to read/write (after select)
+  int n_fd;           // number of fds ready to read/write (value from select)
+  int max_fd;         // maximum nubmer of fds (to pass select())
   fd_set rfd;         // set of read fd
   fd_set wfd;         // set of write fd
   Socket sock;        // socket for listing
@@ -37,6 +36,7 @@ void server() {
 
   // initialize socket
   sock.init(DEFAULT_PORT);
+  std::cout << "socket initialized" << std::endl;
 
   // main loop
   while (1) {
@@ -47,21 +47,23 @@ void server() {
 
     // set listing socket fd
     FD_SET(sock.getFd(), &rfd);
+    max_fd = sock.getFd();
 
     // set sessions fd
     for (std::list<Session>::iterator itr = sessions.begin();
          itr != sessions.end(); ++itr) {
-      if (itr->status() == SESSION_FOR_CLIENT_RECV) {
-        FD_SET(itr->getSockFd(), &rfd);
-        n_fd++;
-      } else if (itr->status() == SESSION_FOR_CLIENT_SEND) {
-        FD_SET(itr->getSockFd(), &wfd);
-        n_fd++;
+      if (itr->getStatus() == SESSION_FOR_CLIENT_RECV) {
+        FD_SET(itr->getFd(), &rfd);
+        max_fd = std::max(max_fd, itr->getFd());
+      } else if (itr->getStatus() == SESSION_FOR_CLIENT_SEND) {
+        FD_SET(itr->getFd(), &wfd);
+        max_fd = std::max(max_fd, itr->getFd());
       }
     }
 
     // wait for fds getting ready
-    n_fd = select(n_fd, &rfd, &wfd, NULL, &tv_timeout);
+    std::cout << "listening..." << std::endl;
+    n_fd = select(max_fd + 1, &rfd, &wfd, NULL, &tv_timeout);
     if (n_fd == -1) {
       std::cout << "[error]: select" << std::endl;
     } else if (n_fd == 0) {
@@ -70,17 +72,25 @@ void server() {
 
     // check each session and recv/send if ready
     for (std::list<Session>::iterator itr = sessions.begin();
-         itr != sessions.end(), n_fd > 0; ++itr) {
-      if (FD_ISSET(itr->getSockFd(), &rfd)) {
-        itr->recvReq();
+         itr != sessions.end() && n_fd > 0;) {
+      if (FD_ISSET(itr->getFd(), &rfd)) {
+        if (itr->recvReq() == -1) {
+          itr = sessions.erase(itr);    // delete session if failed to recv
+        } else {
+          ++itr;
+        }
         n_fd--;
-      } else if (FD_ISSET(itr->getSockFd(), &rfd)) {
-        itr->sendRes();
+      } else if (FD_ISSET(itr->getFd(), &wfd)) {
+        if (itr->sendRes() != -1) {
+          itr = sessions.erase(itr);    // delete session if failed or ended
+        } else {
+          ++itr;
+        }
         n_fd--;
       }
     }
 
-    // accept connection and add to sessions list
+    // accept new connection and add to sessions list
     if (FD_ISSET(sock.getFd(), &rfd)) {
       int accepted_fd;
       // accept all incoming connections (rest of n_fd)

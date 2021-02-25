@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 15:31:12 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/24 20:01:17 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/25 08:01:30 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,6 +27,9 @@
 #define SOCKET_QUE_LEN 128
 
 // buffer size
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 8096
+
+// retry max time to retry to recv/send
+#define RETRY_TIME_MAX 10
 
 #endif /* CONFIG_HPP */

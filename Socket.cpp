@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 18:42:30 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/24 20:55:39 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/25 10:53:30 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -91,7 +91,7 @@ void Socket::init(int port) {
   }
 
   // make the socket ready to accept connection
-  if (listen(fd_, SOCKET_QUE_LEN) == -1) {
+  if (listen(fd_, 3) == -1) {
     close(fd_);
     throw std::runtime_error("webserv: Socket: cannot initialize socket");
   }
@@ -110,11 +110,20 @@ void Socket::init(int port) {
 int Socket::acceptRequest() {
   int accepted_fd;
 
+  // accept connection and store new fd
   accepted_fd =
       accept(fd_, reinterpret_cast<struct sockaddr *>(&addr_in_), &addrlen_);
   if (accepted_fd == -1) {
     std::cout << "[error] failed to accept connection" << std::endl;
-  } else {
-    std::cout << "[webserv] accept connection" << std::endl;
+    return -1;
   }
+
+  // change fd to non blocking fd
+  if (fcntl(fd_, F_SETFL, O_NONBLOCK) != 0) {
+    close(accepted_fd);
+    throw std::runtime_error("webserv: Socket: cannot initialize socket");
+  }
+
+  std::cout << "[webserv] accept connection" << std::endl;
+  return accepted_fd;
 }
