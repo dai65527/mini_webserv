@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 18:42:30 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/25 10:53:30 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/25 13:09:08 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -91,7 +91,7 @@ void Socket::init(int port) {
   }
 
   // make the socket ready to accept connection
-  if (listen(fd_, 3) == -1) {
+  if (listen(fd_, SOCKET_QUE_LEN) == -1) {
     close(fd_);
     throw std::runtime_error("webserv: Socket: cannot initialize socket");
   }

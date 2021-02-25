@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 15:18:18 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/25 12:28:31 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/25 13:08:49 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -62,7 +62,6 @@ void server() {
     }
 
     // wait for fds getting ready
-    std::cout << "listening..." << std::endl;
     n_fd = select(max_fd + 1, &rfd, &wfd, NULL, &tv_timeout);
     if (n_fd == -1) {
       std::cout << "[error]: select" << std::endl;
@@ -87,6 +86,8 @@ void server() {
           ++itr;
         }
         n_fd--;
+      } else {
+        ++itr;
       }
     }
 
