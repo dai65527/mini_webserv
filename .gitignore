@@ -1,5 +1,5 @@
 # binary
-miniserv
+mini_webserv
 *.o
 *.out
 
