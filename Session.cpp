@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 21:41:21 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/26 16:57:46 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/26 17:00:34 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -240,7 +240,6 @@ int Session::createCgiProcess() {
     close(pipe_stdout[1]);
 
     // excecute cgi process (TODO: implement iroiro)
-    write(1, "debug: wrote from child\n", 24);
     char* argv[] = {(char*)"/bin/cat", (char*)"-e", NULL};
     execve("/bin/cat", argv, NULL);
     exit(1);
