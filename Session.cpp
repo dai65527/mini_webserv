@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 21:41:21 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/26 15:05:39 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/26 15:35:35 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -206,7 +206,6 @@ int Session::createCgiProcess() {
     if (dup2(pipe_stdin[0], 0) == -1 || dup2(pipe_stdout[1], 1) == -1) {
       std::cerr << "[error] dup2 failed in cgi process" << std::endl;
       close(0);
-      close(1);
       close(pipe_stdin[0]);
       close(pipe_stdin[1]);
       close(pipe_stdout[0]);
@@ -221,10 +220,6 @@ int Session::createCgiProcess() {
     close(pipe_stdout[1]);
 
     // excecute cgi process (TODO: implement iroiro)
-    // char buf[BUFFER_SIZE];
-    // int n = read(0, buf, BUFFER_SIZE);
-    // write(1, buf, n);
-    // exit(1);
     write(1, "debug: wrote from child\n", 24);
     char* argv[] = {(char*)"/bin/cat", (char*)"-e", NULL};
     execve("/bin/cat", argv, NULL);
@@ -245,10 +240,6 @@ int Session::createCgiProcess() {
 
   // change status to cgi write
   status_ = SESSION_FOR_CGI_WRITE;
-
-  // // JUST FOR TEST
-  // // string to write to cgi process
-  // response_buf_ = "HELLO CGI!!";
 
   // return status 200 on success (but not a final status)
   return HTTP_200;
