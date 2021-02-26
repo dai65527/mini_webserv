@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 21:41:21 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/26 15:35:35 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/26 16:16:23 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -82,6 +82,7 @@ Session::~Session() {}
 
 int Session::getStatus() const { return status_; }
 int Session::getSockFd() const { return sock_fd_; }
+int Session::getFileFd() const { return file_fd_; }
 int Session::getCgiInputFd() const { return cgi_input_fd_; }
 int Session::getCgiOutputFd() const { return cgi_output_fd_; }
 
@@ -152,7 +153,7 @@ int Session::sendRes() {
 
 int Session::createResponse() {
   // create cgi process if requested
-  if (true /* will add function check if cgi is needed */) {
+  if (!request_buf_.compare(0, 3, "cgi", 0, 3)) {
     int http_status = createCgiProcess();  //
     if (http_status != HTTP_200) {
       std::cout << "[error] failed to create cgi process" << std::endl;
@@ -160,9 +161,18 @@ int Session::createResponse() {
       return SESSION_FOR_CLIENT_SEND;
     }
     return SESSION_FOR_CGI_WRITE;
-  }
 
   // from file (to be implemented)
+  } else if (!request_buf_.compare(0, 4, "read", 0, 4)) {
+    file_fd_ = open("hello.txt", O_RDONLY);      // toriaezu
+    if (file_fd_ == -1) {
+      response_buf_ = "404 not found";
+      return SESSION_FOR_CLIENT_SEND;
+    }
+    fcntl(file_fd_, F_SETFL, O_NONBLOCK);
+    return SESSION_FOR_FILE_READ;
+  }
+
   response_buf_ = request_buf_;  // TODO: create function to make response
   return SESSION_FOR_CLIENT_SEND;
 }
@@ -332,6 +342,54 @@ int Session::readFromCgiProcess() {
   retry_count_ = 0;
 
   // check if pipe closed
+  if (n == 0) {
+    close(cgi_output_fd_);              // close pipefd
+    status_ = SESSION_FOR_CLIENT_SEND;  // set for send response
+    return 0;
+  }
+
+  // append data to response
+  response_buf_.append(read_buf, n);
+
+  return 0;
+}
+
+/*
+** function: readFromFile
+**
+** read from file refered by file_fd_ and store to response
+*/
+
+int Session::readFromFile() {
+  ssize_t n;
+  char read_buf[BUFFER_SIZE];
+
+  // read from file
+  n = read(file_fd_, read_buf, BUFFER_SIZE);
+
+  // retry seveal times even if read failed
+  if (n == -1) {
+    std::cout << "[error] failed to read from file" << std::endl;
+    if (retry_count_ == RETRY_TIME_MAX) {
+      retry_count_ = 0;
+
+      // close file and make error responce
+      std::cout << "[error] close file" << std::endl;
+      close(cgi_output_fd_);
+      response_buf_ = "500 internal server error";  // TODO: make response func
+
+      // to send error response to client
+      status_ = SESSION_FOR_CLIENT_SEND;
+      return 0;
+    }
+    retry_count_++;
+    return 0;
+  }
+
+  // reset retry conunt on success
+  retry_count_ = 0;
+
+  // check if reached eof
   if (n == 0) {
     close(cgi_output_fd_);              // close pipefd
     status_ = SESSION_FOR_CLIENT_SEND;  // set for send response
