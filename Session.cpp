@@ -6,15 +6,19 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 21:41:21 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/25 12:26:39 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/26 15:05:39 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "Session.hpp"
 
+#include <fcntl.h>
+#include <signal.h>  // kill
 #include <sys/socket.h>
+#include <sys/wait.h>  // waitpid
 #include <unistd.h>
 
+#include <iostream>
 #include <string>
 
 /*
@@ -24,7 +28,7 @@
 **    - status is initialized SESSION_FOR_CLIENT_RECV first
 */
 
-Session::Session(int sock_fd) : fd_(sock_fd) {
+Session::Session(int sock_fd) : sock_fd_(sock_fd) {
   status_ = SESSION_FOR_CLIENT_RECV;  // will receive request at first
   retry_count_ = 0;                   // init retry count
 }
@@ -35,7 +39,7 @@ Session::Session(int sock_fd) : fd_(sock_fd) {
 ** will be used only in list<Session>
 */
 
-Session::Session() : fd_(0), status_(SESSION_NOT_INIT) {}
+Session::Session() : sock_fd_(0), status_(SESSION_NOT_INIT) {}
 
 /*
 ** copy constructor
@@ -55,9 +59,10 @@ Session& Session::operator=(const Session& rhs) {
   if (this == &rhs) {
     return *this;
   }
-  fd_ = rhs.fd_;
+  sock_fd_ = rhs.sock_fd_;
   status_ = rhs.status_;
-  buf_ = rhs.buf_;
+  request_buf_ = rhs.request_buf_;
+  response_buf_ = rhs.response_buf_;
   retry_count_ = rhs.retry_count_;
   return *this;
 }
@@ -66,7 +71,7 @@ Session& Session::operator=(const Session& rhs) {
 ** destctor
 **
 ** do nothing
-** must not close fd in destructor (fd will be closed when adding to list)
+** must not close fd in destructor (or fd will be closed when adding to list)
 */
 
 Session::~Session() {}
@@ -76,7 +81,9 @@ Session::~Session() {}
 */
 
 int Session::getStatus() const { return status_; }
-int Session::getFd() const { return fd_; }
+int Session::getSockFd() const { return sock_fd_; }
+int Session::getCgiInputFd() const { return cgi_input_fd_; }
+int Session::getCgiOutputFd() const { return cgi_output_fd_; }
 
 /*
 ** function: recvReq
@@ -88,21 +95,22 @@ int Session::recvReq() {
   ssize_t n;
   char read_buf[BUFFER_SIZE];
 
-  n = recv(fd_, read_buf, BUFFER_SIZE, 0);
+  n = recv(sock_fd_, read_buf, BUFFER_SIZE, 0);
   if (n == -1) {
     if (retry_count_ == RETRY_TIME_MAX) {
-      close(fd_);
+      close(sock_fd_);
       return -1;  // return -1 if error (this session will be closed)
     }
     retry_count_++;
     return 0;
-  } else if (n == 1) {    // when got EOF
-    status_ = SESSION_FOR_CLIENT_SEND;
+  }
+  request_buf_.append(read_buf, n);
+  /// TODO: add request perser function here
+  if (n == 1 /* this will be resulted from content of request */) {
     retry_count_ = 0;
-    createResponse();
+    status_ = createResponse();
     return 1;
   }
-  buf_.append(read_buf, n);
   retry_count_ = 0;
   return 0;
 }
@@ -116,18 +124,20 @@ int Session::recvReq() {
 int Session::sendRes() {
   ssize_t n;
 
-  n = send(fd_, buf_.c_str(), buf_.length(), 0);
+  n = send(sock_fd_, response_buf_.c_str(), response_buf_.length(), 0);
   if (n == -1) {
+    std::cout << "[error] failed to send response" << std::endl;
     if (retry_count_ == RETRY_TIME_MAX) {
-      close(fd_);
+      std::cout << "[error] close connection" << std::endl;
+      close(sock_fd_);
       return -1;  // return -1 if error (this session will be closed)
     }
     retry_count_++;
     return 0;
   }
-  buf_.erase(0, n);  // erase data already sent
-  if (buf_.empty()) {
-    close(fd_);
+  response_buf_.erase(0, n);  // erase data already sent
+  if (response_buf_.empty()) {
+    close(sock_fd_);
     return 1;  // return 1 if all data sent (this session will be closed)
   }
   retry_count_ = 0;  // reset retry_count if success
@@ -141,6 +151,204 @@ int Session::sendRes() {
 */
 
 int Session::createResponse() {
-  // 何もせず返す（とりあえずオウム返し）
-  return 1;
+  // create cgi process if requested
+  if (true /* will add function check if cgi is needed */) {
+    int http_status = createCgiProcess();  //
+    if (http_status != HTTP_200) {
+      std::cout << "[error] failed to create cgi process" << std::endl;
+      response_buf_ = "cannot execute cgi";  // TODO: func create error response
+      return SESSION_FOR_CLIENT_SEND;
+    }
+    return SESSION_FOR_CGI_WRITE;
+  }
+
+  // from file (to be implemented)
+  response_buf_ = request_buf_;  // TODO: create function to make response
+  return SESSION_FOR_CLIENT_SEND;
+}
+
+/*
+** function: createCgiProcess
+**
+** create proccess to execute CGI process
+**    - create environment variables and input string for cgi process (TODO!!)
+**    - create piped fds connected to stdin and stdout of CGI process
+**    - create child process for cgi and execute cgi program
+*/
+
+int Session::createCgiProcess() {
+  // create a pipe connect to stdin of cgi process
+  int pipe_stdin[2];
+  if (pipe(pipe_stdin) == -1) {
+    std::cout << "[error] failed to create cgi process" << std::endl;
+    return HTTP_500;
+  }
+
+  // create a pipe connect to stdout of cgi process
+  int pipe_stdout[2];
+  if (pipe(pipe_stdout) == -1) {
+    std::cout << "[error] failed to create cgi process" << std::endl;
+    close(pipe_stdin[0]);
+    close(pipe_stdin[1]);
+    return HTTP_500;
+  }
+
+  // create cgi process
+  cgi_pid_ = fork();
+  if (cgi_pid_ == -1) {  // close pipe if failed
+    close(pipe_stdin[0]);
+    close(pipe_stdin[1]);
+    close(pipe_stdout[0]);
+    close(pipe_stdout[1]);
+    std::cout << "[error] failed to create cgi process" << std::endl;
+    return HTTP_500;
+  } else if (cgi_pid_ == 0) {  // cgi process (child)
+    if (dup2(pipe_stdin[0], 0) == -1 || dup2(pipe_stdout[1], 1) == -1) {
+      std::cerr << "[error] dup2 failed in cgi process" << std::endl;
+      close(0);
+      close(1);
+      close(pipe_stdin[0]);
+      close(pipe_stdin[1]);
+      close(pipe_stdout[0]);
+      close(pipe_stdout[1]);
+      exit(1);
+    }
+
+    // close no longer needed pipe fd
+    close(pipe_stdin[0]);
+    close(pipe_stdin[1]);
+    close(pipe_stdout[0]);
+    close(pipe_stdout[1]);
+
+    // excecute cgi process (TODO: implement iroiro)
+    // char buf[BUFFER_SIZE];
+    // int n = read(0, buf, BUFFER_SIZE);
+    // write(1, buf, n);
+    // exit(1);
+    write(1, "debug: wrote from child\n", 24);
+    char* argv[] = {(char*)"/bin/cat", (char*)"-e", NULL};
+    execve("/bin/cat", argv, NULL);
+    exit(1);
+  }
+
+  // save piped fd and set to non blocking
+  cgi_input_fd_ = pipe_stdin[1];
+  cgi_output_fd_ = pipe_stdout[0];
+
+  // set as non blocking fd
+  fcntl(cgi_input_fd_, F_SETFL, O_NONBLOCK);
+  fcntl(cgi_output_fd_, F_SETFL, O_NONBLOCK);
+
+  // close fd not to use in parent process
+  close(pipe_stdin[0]);
+  close(pipe_stdout[1]);
+
+  // change status to cgi write
+  status_ = SESSION_FOR_CGI_WRITE;
+
+  // // JUST FOR TEST
+  // // string to write to cgi process
+  // response_buf_ = "HELLO CGI!!";
+
+  // return status 200 on success (but not a final status)
+  return HTTP_200;
+}
+
+/*
+** function: writeToCgiProcess
+*/
+
+int Session::writeToCgiProcess() {
+  ssize_t n;
+
+  // write to cgi process
+  n = write(cgi_input_fd_, request_buf_.c_str(), request_buf_.length());
+
+  // retry several times even if write failed
+  if (n == -1) {
+    std::cout << "[error] failed to write to CGI process" << std::endl;
+
+    // give up if reached retry count to maximum
+    if (retry_count_ == RETRY_TIME_MAX) {
+      retry_count_ = 0;
+
+      // close connection
+      std::cout << "[error] close connection from CGI process" << std::endl;
+      close(cgi_input_fd_);
+
+      // expect response from cgi process
+      status_ = SESSION_FOR_CGI_READ;  // to read from cgi process
+      return 0;
+    }
+
+    retry_count_++;
+    return 0;
+  }
+
+  // reset retry conunt on success
+  retry_count_ = 0;
+
+  // erase written data
+  request_buf_.erase(0, n);
+
+  // written all data
+  if (request_buf_.empty()) {
+    close(cgi_input_fd_);
+    status_ = SESSION_FOR_CGI_READ;  // to read from cgi process
+    return 0;
+  }
+
+  // to next read
+  return 0;
+}
+
+/*
+** function: readFromCgiProcess
+*/
+
+int Session::readFromCgiProcess() {
+  ssize_t n;
+  char read_buf[BUFFER_SIZE];
+
+  // read from cgi process
+  n = read(cgi_output_fd_, read_buf, BUFFER_SIZE);
+
+  // retry seveal times even if read failed
+  if (n == -1) {
+    std::cout << "[error] failed to read from cgi process" << std::endl;
+    if (retry_count_ == RETRY_TIME_MAX) {
+      retry_count_ = 0;
+
+      // close connection and make error responce
+      std::cout << "[error] close connection to CGI process" << std::endl;
+      close(cgi_output_fd_);
+      response_buf_ = "500 internal server error";  // TODO: make response func
+
+      // kill the process on error (if failed kill, we can do nothing...)
+      if (kill(cgi_pid_, SIGKILL) == -1) {
+        std::cout << "[error] failed kill cgi process" << std::endl;
+      }
+
+      // to send error response to client
+      status_ = SESSION_FOR_CLIENT_SEND;
+      return 0;
+    }
+    retry_count_++;
+    return 0;
+  }
+
+  // reset retry conunt on success
+  retry_count_ = 0;
+
+  // check if pipe closed
+  if (n == 0) {
+    close(cgi_output_fd_);              // close pipefd
+    status_ = SESSION_FOR_CLIENT_SEND;  // set for send response
+    return 0;
+  }
+
+  // append data to response
+  response_buf_.append(read_buf, n);
+
+  return 0;
 }

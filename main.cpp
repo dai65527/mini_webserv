@@ -6,11 +6,12 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 15:18:18 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/25 13:08:49 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/26 15:10:01 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include <sys/select.h>
+#include <signal.h>
 
 #include <exception>
 #include <iostream>
@@ -34,6 +35,9 @@ void server() {
   tv_timeout.tv_sec = SELECT_TIMEOUT_MS / 1000;
   tv_timeout.tv_usec = (SELECT_TIMEOUT_MS * 1000) % 1000000;
 
+  // ignore sigchld signal
+  signal(SIGCHLD, SIG_IGN);
+
   // initialize socket
   sock.init(DEFAULT_PORT);
   std::cout << "socket initialized" << std::endl;
@@ -53,11 +57,17 @@ void server() {
     for (std::list<Session>::iterator itr = sessions.begin();
          itr != sessions.end(); ++itr) {
       if (itr->getStatus() == SESSION_FOR_CLIENT_RECV) {
-        FD_SET(itr->getFd(), &rfd);
-        max_fd = std::max(max_fd, itr->getFd());
+        FD_SET(itr->getSockFd(), &rfd);
+        max_fd = std::max(max_fd, itr->getSockFd());
       } else if (itr->getStatus() == SESSION_FOR_CLIENT_SEND) {
-        FD_SET(itr->getFd(), &wfd);
-        max_fd = std::max(max_fd, itr->getFd());
+        FD_SET(itr->getSockFd(), &wfd);
+        max_fd = std::max(max_fd, itr->getSockFd());
+      } else if (itr->getStatus() == SESSION_FOR_CGI_WRITE) {
+        FD_SET(itr->getCgiInputFd(), &wfd);
+        max_fd = std::max(max_fd, itr->getCgiInputFd());
+      } else if (itr->getStatus() == SESSION_FOR_CGI_READ) {
+        FD_SET(itr->getCgiOutputFd(), &rfd);
+        max_fd = std::max(max_fd, itr->getCgiOutputFd());
       }
     }
 
@@ -69,20 +79,38 @@ void server() {
       continue;
     }
 
-    // check each session and recv/send if ready
+    // check each session if it is ready to recv/send
     for (std::list<Session>::iterator itr = sessions.begin();
          itr != sessions.end() && n_fd > 0;) {
-      if (FD_ISSET(itr->getFd(), &rfd)) {
+      if (FD_ISSET(itr->getSockFd(), &rfd)) {
         if (itr->recvReq() == -1) {
           itr = sessions.erase(itr);    // delete session if failed to recv
+        } else {
+          std::cout << "[webserv] received request data" << std::endl;
+          ++itr;
+        }
+        n_fd--;
+      } else if (FD_ISSET(itr->getSockFd(), &wfd)) {
+        if (itr->sendRes() != 0) {
+          std::cout << "[webserv] sent response data" << std::endl;
+          itr = sessions.erase(itr);    // delete session if failed or ended
         } else {
           ++itr;
         }
         n_fd--;
-      } else if (FD_ISSET(itr->getFd(), &wfd)) {
-        if (itr->sendRes() != -1) {
-          itr = sessions.erase(itr);    // delete session if failed or ended
+      } else if (FD_ISSET(itr->getCgiInputFd(), &wfd)) {
+        if (itr->writeToCgiProcess() == -1) {
+          itr = sessions.erase(itr);    // delete session if failed
         } else {
+          std::cout << "[webserv] wrote data to cgi" << std::endl;
+          ++itr;
+        }
+        n_fd--;
+      } else if (FD_ISSET(itr->getCgiOutputFd(), &rfd)) {
+        if (itr->readFromCgiProcess() == -1) {
+          itr = sessions.erase(itr);    // delete session if failed
+        } else {
+          std::cout << "[webserv] read data from cgi" << std::endl;
           ++itr;
         }
         n_fd--;
