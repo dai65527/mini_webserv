@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 16:26:56 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/25 23:16:52 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/26 13:49:28 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,11 +24,11 @@
 #define SESSION_FOR_CLIENT_SEND 0x0002
 #define SESSION_FOR_CGI_WRITE 0x0011  // to be implemented
 #define SESSION_FOR_CGI_READ 0x0012  // to be implemented
-#define SESSION_FOR_FILE_READ 0x0011  // to be implemented
-#define SESSION_FOR_FILE_WRITE 0x0012  // to be implemented
+#define SESSION_FOR_FILE_READ 0x0021  // to be implemented
+#define SESSION_FOR_FILE_WRITE 0x0022  // to be implemented
 
 #define HTTP_200 200  // 200 OK
-#define HTTP_404 403  // 403 Forbidden
+#define HTTP_403 403  // 403 Forbidden
 #define HTTP_404 404  // 404 Not Found
 #define HTTP_418 418  // 418 I'm a teapot
 #define HTTP_500 500  // 500 Internal Server Error
