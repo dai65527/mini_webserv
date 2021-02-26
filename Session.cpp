@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 21:41:21 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/26 16:16:23 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/26 16:57:46 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -162,7 +162,7 @@ int Session::createResponse() {
     }
     return SESSION_FOR_CGI_WRITE;
 
-  // from file (to be implemented)
+  // create response from file
   } else if (!request_buf_.compare(0, 4, "read", 0, 4)) {
     file_fd_ = open("hello.txt", O_RDONLY);      // toriaezu
     if (file_fd_ == -1) {
@@ -171,6 +171,16 @@ int Session::createResponse() {
     }
     fcntl(file_fd_, F_SETFL, O_NONBLOCK);
     return SESSION_FOR_FILE_READ;
+
+  // write to file
+  } else if (!request_buf_.compare(0, 4, "write", 0, 4)) {
+    file_fd_ = open("./test_req.txt", O_RDWR | O_CREAT, 0777);   // toriaezu
+    if (file_fd_ == -1) {
+      response_buf_ = "503 forbidden";
+      return SESSION_FOR_CLIENT_SEND;
+    }
+    fcntl(file_fd_, F_SETFL, O_NONBLOCK);
+    return SESSION_FOR_FILE_WRITE;
   }
 
   response_buf_ = request_buf_;  // TODO: create function to make response
@@ -399,5 +409,59 @@ int Session::readFromFile() {
   // append data to response
   response_buf_.append(read_buf, n);
 
+  return 0;
+}
+
+/*
+** function: writeToFile
+**
+** read from file refered by file_fd_ and store to response
+*/
+
+int Session::writeToFile() {
+  ssize_t n;
+
+  // write to file
+  n = write(file_fd_, request_buf_.c_str(), request_buf_.length());
+
+  // retry several times even if write failed
+  if (n == -1) {
+    std::cout << "[error] failed to write to file" << std::endl;
+
+    // give up if reached retry count to maximum
+    if (retry_count_ == RETRY_TIME_MAX) {
+      retry_count_ = 0;
+
+      // close connection
+      std::cout << "[error] close file" << std::endl;
+      close(file_fd_);
+
+      // send response to notify request failed
+      response_buf_ = "500 server error";
+      status_ = SESSION_FOR_CLIENT_SEND;  // to send response to client
+      return 0;
+    }
+
+    retry_count_++;
+    return 0;
+  }
+
+  // reset retry conunt on success
+  retry_count_ = 0;
+
+  // erase written data
+  request_buf_.erase(0, n);
+
+  // written all data
+  if (request_buf_.empty()) {
+    close(file_fd_);
+
+    // create response to notify the client
+    response_buf_ = "201 created";
+    status_ = SESSION_FOR_CLIENT_SEND;  // to send response to client
+    return 0;
+  }
+
+  // to next read
   return 0;
 }

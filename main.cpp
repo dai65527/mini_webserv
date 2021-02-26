@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 15:18:18 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/26 16:22:01 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/26 16:49:44 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -62,6 +62,9 @@ void server() {
       } else if (itr->getStatus() == SESSION_FOR_FILE_READ) {
         FD_SET(itr->getFileFd(), &rfd);
         max_fd = std::max(max_fd, itr->getFileFd());
+      } else if (itr->getStatus() == SESSION_FOR_FILE_WRITE) {
+        FD_SET(itr->getFileFd(), &wfd);
+        max_fd = std::max(max_fd, itr->getFileFd());
       } else if (itr->getStatus() == SESSION_FOR_CGI_WRITE) {
         FD_SET(itr->getCgiInputFd(), &wfd);
         max_fd = std::max(max_fd, itr->getCgiInputFd());
@@ -98,6 +101,14 @@ void server() {
           itr = sessions.erase(itr);    // delete session if failed or ended
         } else {
           std::cout << "[webserv] read data from file" << std::endl;
+          ++itr;
+        }
+        n_fd--;
+      } else if (FD_ISSET(itr->getFileFd(), &wfd)) {
+        if (itr->writeToFile() == -1) {
+          itr = sessions.erase(itr);    // delete session if failed or ended
+        } else {
+          std::cout << "[webserv] write data to file" << std::endl;
           ++itr;
         }
         n_fd--;
