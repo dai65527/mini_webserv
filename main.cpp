@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 15:18:18 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/26 14:58:57 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/26 15:10:01 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -54,10 +54,8 @@ void server() {
     max_fd = sock.getFd();
 
     // set sessions fd
-    printf("debug: session num = %zu\n", sessions.size());
     for (std::list<Session>::iterator itr = sessions.begin();
          itr != sessions.end(); ++itr) {
-      printf("debug: status = %x\n", itr->getStatus());
       if (itr->getStatus() == SESSION_FOR_CLIENT_RECV) {
         FD_SET(itr->getSockFd(), &rfd);
         max_fd = std::max(max_fd, itr->getSockFd());
@@ -70,7 +68,6 @@ void server() {
       } else if (itr->getStatus() == SESSION_FOR_CGI_READ) {
         FD_SET(itr->getCgiOutputFd(), &rfd);
         max_fd = std::max(max_fd, itr->getCgiOutputFd());
-        printf("debug: SETFD read from cgi!!!!!\n");
       }
     }
 
@@ -89,11 +86,13 @@ void server() {
         if (itr->recvReq() == -1) {
           itr = sessions.erase(itr);    // delete session if failed to recv
         } else {
+          std::cout << "[webserv] received request data" << std::endl;
           ++itr;
         }
         n_fd--;
       } else if (FD_ISSET(itr->getSockFd(), &wfd)) {
         if (itr->sendRes() != 0) {
+          std::cout << "[webserv] sent response data" << std::endl;
           itr = sessions.erase(itr);    // delete session if failed or ended
         } else {
           ++itr;
@@ -103,14 +102,15 @@ void server() {
         if (itr->writeToCgiProcess() == -1) {
           itr = sessions.erase(itr);    // delete session if failed
         } else {
+          std::cout << "[webserv] wrote data to cgi" << std::endl;
           ++itr;
         }
         n_fd--;
       } else if (FD_ISSET(itr->getCgiOutputFd(), &rfd)) {
-        printf("debug: to read from cgi!!!!!\n");
         if (itr->readFromCgiProcess() == -1) {
           itr = sessions.erase(itr);    // delete session if failed
         } else {
+          std::cout << "[webserv] read data from cgi" << std::endl;
           ++itr;
         }
         n_fd--;

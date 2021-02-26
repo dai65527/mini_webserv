@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 21:41:21 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/26 14:58:25 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/26 15:05:39 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -108,7 +108,6 @@ int Session::recvReq() {
   /// TODO: add request perser function here
   if (n == 1 /* this will be resulted from content of request */) {
     retry_count_ = 0;
-    printf("debug: received request\n");
     status_ = createResponse();
     return 1;
   }
@@ -160,7 +159,6 @@ int Session::createResponse() {
       response_buf_ = "cannot execute cgi";  // TODO: func create error response
       return SESSION_FOR_CLIENT_SEND;
     }
-    printf("debug: cgi process created (pid = %d)\n", cgi_pid_);
     return SESSION_FOR_CGI_WRITE;
   }
 
@@ -205,7 +203,6 @@ int Session::createCgiProcess() {
     std::cout << "[error] failed to create cgi process" << std::endl;
     return HTTP_500;
   } else if (cgi_pid_ == 0) {  // cgi process (child)
-    printf("[debug] hello form childlen\n");
     if (dup2(pipe_stdin[0], 0) == -1 || dup2(pipe_stdout[1], 1) == -1) {
       std::cerr << "[error] dup2 failed in cgi process" << std::endl;
       close(0);
@@ -264,9 +261,6 @@ int Session::createCgiProcess() {
 int Session::writeToCgiProcess() {
   ssize_t n;
 
-  printf("debug: ready to write to cgi process (\"%s\")\n",
-         request_buf_.c_str());
-
   // write to cgi process
   n = write(cgi_input_fd_, request_buf_.c_str(), request_buf_.length());
 
@@ -291,8 +285,6 @@ int Session::writeToCgiProcess() {
     return 0;
   }
 
-  printf("debug: written to cgi\n");
-
   // reset retry conunt on success
   retry_count_ = 0;
 
@@ -302,7 +294,6 @@ int Session::writeToCgiProcess() {
   // written all data
   if (request_buf_.empty()) {
     close(cgi_input_fd_);
-    printf("debug: closed cgi input fd\n");
     status_ = SESSION_FOR_CGI_READ;  // to read from cgi process
     return 0;
   }
@@ -319,12 +310,8 @@ int Session::readFromCgiProcess() {
   ssize_t n;
   char read_buf[BUFFER_SIZE];
 
-  printf("debug: ready to read from cgi process\n");
-
   // read from cgi process
   n = read(cgi_output_fd_, read_buf, BUFFER_SIZE);
-
-  printf("debug n = %zd\n", n);
 
   // retry seveal times even if read failed
   if (n == -1) {
