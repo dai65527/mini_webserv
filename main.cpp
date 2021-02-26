@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 15:18:18 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/26 15:10:01 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/26 16:49:44 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -59,15 +59,21 @@ void server() {
       if (itr->getStatus() == SESSION_FOR_CLIENT_RECV) {
         FD_SET(itr->getSockFd(), &rfd);
         max_fd = std::max(max_fd, itr->getSockFd());
-      } else if (itr->getStatus() == SESSION_FOR_CLIENT_SEND) {
-        FD_SET(itr->getSockFd(), &wfd);
-        max_fd = std::max(max_fd, itr->getSockFd());
+      } else if (itr->getStatus() == SESSION_FOR_FILE_READ) {
+        FD_SET(itr->getFileFd(), &rfd);
+        max_fd = std::max(max_fd, itr->getFileFd());
+      } else if (itr->getStatus() == SESSION_FOR_FILE_WRITE) {
+        FD_SET(itr->getFileFd(), &wfd);
+        max_fd = std::max(max_fd, itr->getFileFd());
       } else if (itr->getStatus() == SESSION_FOR_CGI_WRITE) {
         FD_SET(itr->getCgiInputFd(), &wfd);
         max_fd = std::max(max_fd, itr->getCgiInputFd());
       } else if (itr->getStatus() == SESSION_FOR_CGI_READ) {
         FD_SET(itr->getCgiOutputFd(), &rfd);
         max_fd = std::max(max_fd, itr->getCgiOutputFd());
+      } else if (itr->getStatus() == SESSION_FOR_CLIENT_SEND) {
+        FD_SET(itr->getSockFd(), &wfd);
+        max_fd = std::max(max_fd, itr->getSockFd());
       }
     }
 
@@ -90,11 +96,19 @@ void server() {
           ++itr;
         }
         n_fd--;
-      } else if (FD_ISSET(itr->getSockFd(), &wfd)) {
-        if (itr->sendRes() != 0) {
-          std::cout << "[webserv] sent response data" << std::endl;
+      } else if (FD_ISSET(itr->getFileFd(), &rfd)) {
+        if (itr->readFromFile() == -1) {
           itr = sessions.erase(itr);    // delete session if failed or ended
         } else {
+          std::cout << "[webserv] read data from file" << std::endl;
+          ++itr;
+        }
+        n_fd--;
+      } else if (FD_ISSET(itr->getFileFd(), &wfd)) {
+        if (itr->writeToFile() == -1) {
+          itr = sessions.erase(itr);    // delete session if failed or ended
+        } else {
+          std::cout << "[webserv] write data to file" << std::endl;
           ++itr;
         }
         n_fd--;
@@ -111,6 +125,14 @@ void server() {
           itr = sessions.erase(itr);    // delete session if failed
         } else {
           std::cout << "[webserv] read data from cgi" << std::endl;
+          ++itr;
+        }
+        n_fd--;
+      } else if (FD_ISSET(itr->getSockFd(), &wfd)) {
+        if (itr->sendRes() != 0) {
+          std::cout << "[webserv] sent response data" << std::endl;
+          itr = sessions.erase(itr);    // delete session if failed or ended
+        } else {
           ++itr;
         }
         n_fd--;
