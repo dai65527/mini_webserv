@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 21:41:21 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/26 17:00:34 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/02/27 14:16:27 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,10 +28,8 @@
 **    - status is initialized SESSION_FOR_CLIENT_RECV first
 */
 
-Session::Session(int sock_fd) : sock_fd_(sock_fd) {
-  status_ = SESSION_FOR_CLIENT_RECV;  // will receive request at first
-  retry_count_ = 0;                   // init retry count
-}
+Session::Session(int sock_fd)
+    : status_(SESSION_FOR_CLIENT_RECV), sock_fd_(sock_fd), retry_count_(0) {}
 
 /*
 ** default constructor
@@ -39,7 +37,7 @@ Session::Session(int sock_fd) : sock_fd_(sock_fd) {
 ** will be used only in list<Session>
 */
 
-Session::Session() : sock_fd_(0), status_(SESSION_NOT_INIT) {}
+Session::Session() : status_(SESSION_NOT_INIT), sock_fd_(0), retry_count_(0) {}
 
 /*
 ** copy constructor
@@ -80,7 +78,7 @@ Session::~Session() {}
 ** getters
 */
 
-int Session::getStatus() const { return status_; }
+SessionStatus Session::getStatus() const { return status_; }
 int Session::getSockFd() const { return sock_fd_; }
 int Session::getFileFd() const { return file_fd_; }
 int Session::getCgiInputFd() const { return cgi_input_fd_; }
@@ -151,7 +149,7 @@ int Session::sendRes() {
 ** send response to client
 */
 
-int Session::createResponse() {
+SessionStatus Session::createResponse() {
   // create cgi process if requested
   if (!request_buf_.compare(0, 3, "cgi", 0, 3)) {
     int http_status = createCgiProcess();  //
@@ -162,9 +160,9 @@ int Session::createResponse() {
     }
     return SESSION_FOR_CGI_WRITE;
 
-  // create response from file
+    // create response from file
   } else if (!request_buf_.compare(0, 4, "read", 0, 4)) {
-    file_fd_ = open("hello.txt", O_RDONLY);      // toriaezu
+    file_fd_ = open("hello.txt", O_RDONLY);  // toriaezu
     if (file_fd_ == -1) {
       response_buf_ = "404 not found";
       return SESSION_FOR_CLIENT_SEND;
@@ -172,9 +170,9 @@ int Session::createResponse() {
     fcntl(file_fd_, F_SETFL, O_NONBLOCK);
     return SESSION_FOR_FILE_READ;
 
-  // write to file
+    // write to file
   } else if (!request_buf_.compare(0, 4, "write", 0, 4)) {
-    file_fd_ = open("./test_req.txt", O_RDWR | O_CREAT, 0777);   // toriaezu
+    file_fd_ = open("./test_req.txt", O_RDWR | O_CREAT, 0777);  // toriaezu
     if (file_fd_ == -1) {
       response_buf_ = "503 forbidden";
       return SESSION_FOR_CLIENT_SEND;

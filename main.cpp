@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2021/02/24 15:18:18 by dnakano           #+#    #+#             */
-/*   Updated: 2021/02/26 16:49:44 by dnakano          ###   ########.fr       */
+/*   Updated: 2021/03/01 19:59:36 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,6 +21,7 @@
 #include "Session.hpp"
 #include "Socket.hpp"
 #include "config.hpp"
+#include <math.h>
 
 void server() {
   int n_fd;           // number of fds ready to read/write (value from select)
@@ -78,6 +79,7 @@ void server() {
     }
 
     // wait for fds getting ready
+    std::cout << "selecting..." << std::endl;
     n_fd = select(max_fd + 1, &rfd, &wfd, NULL, &tv_timeout);
     if (n_fd == -1) {
       std::cout << "[error]: select" << std::endl;
